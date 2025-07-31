@@ -1,3 +1,10 @@
+figuras/*_png
+figuras/wst*
+rasters/
+vector/
+esri.tif
+test.*
+
 # History files
 .Rhistory
 .Rapp.history
