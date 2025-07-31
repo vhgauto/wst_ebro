@@ -56,15 +56,23 @@ library(terra)
 library(tidyterra)
 library(ggspatial)
 library(tidyverse)
+
+c1 <- "#AD1519"
+cp1 <- "#FFB04F"
+cp2 <- "#6A359C"
+cp3 <- "#679C35"
+cp4 <- "#CD1076"
 ```
 
 # Región de estudio {#sec-roi}
 
 Imagen a color real del Delta del Río Ebro, España, sobre el Mar Mediterráneo.
 
+Se indican cuatro sitios de interés que luego serán utilizados para evaluar la temperatura superficial del agua (`WST`), generando series temporales (Sección [-@sec-serie-temporal]).
+
 ::: {.column-page-inset-right}
 
-![Región de interés en el Delta del Ebro.](figuras/roi.png){#fig-roi}
+![Región y sitios de interés en el Delta del Ebro.](figuras/roi.png){#fig-roi}
 
 :::
 
@@ -203,7 +211,7 @@ f_rgb <- function(x, carpeta) {
     stretch = "lin",
     mar = c(1, 1, 4, 1),
     main = as.character(tit),
-    cex.main = 2.5
+    cex.main = 3
   )
 
   dev.off()
@@ -388,7 +396,7 @@ Se crearon mapas de `WST` para evaluar la distribución espacial y series tempor
 
 Empleando únicamente las imágenes con cielo despejado (@sec-cielo-despejado), se aplicó la ecuación [-@eq-wst] a cada píxel obteniendo la temperatura superficial del agua (`WST`), en $°C$.
 
-En cada mapa de `WST` se mantuvo el mismo gradiente de color, a fin de facilitar la comparación entre fechas.
+En cada mapa de `WST` se creó un gradiente de color adaptado, a fin de destacar los cambios de temperatura de la fecha de interés.
 
 ```{r}
 f_wst_rango <- function(raster) {
@@ -411,8 +419,8 @@ wst_maximo <- floor(98*escala+wst_min)
 Se definió una función auxiliar para generar los mapas de distribución espacial de `WST`.
 
 ```{r}
-ancho <- 2000
-alto <- ancho * (1080 / 1267)
+ancho <- 1000
+alto <- round(ancho * (1080 / 1267))
 
 f_wst <- function(raster) {
   wst <- 0.00341802*raster$ST_B10+149-273.15
@@ -439,33 +447,39 @@ f_wst <- function(raster) {
       midpoint = (ext_min+ext_max)/2,
       limits = c(ext_min, ext_max),
       breaks = seq(ext_min, ext_max, length.out = 5),
-      name = "Temp. (°C)"
+      name = "WST (°C)"
     ) +
     annotation_north_arrow(
-      height = unit(1, "cm"),
-      width = unit(1, "cm"),
-      pad_x = unit(.5, "cm"),
-      pad_y = unit(.5, "cm"),
+      height = unit(.3, "cm"),
+      width = unit(.3, "cm"),
+      pad_x = unit(.2, "cm"),
+      pad_y = unit(.2, "cm"),
       location = "tl",
       style = north_arrow_fancy_orienteering(
+        line_width = .5,
         line_col = "white",
-        text_col = "white"
+        text_col = "white",
+        text_size = 4
       )
     ) +
     annotation_scale(
-      pad_x = unit(.5, "cm"),
-      pad_y = unit(.5, "cm"),
-      location = "br"
+      pad_x = unit(.25, "cm"),
+      pad_y = unit(.25, "cm"),
+      location = "br",
+      text_cex = .5,
+      height = unit(0.1, "cm")
     ) +
     labs(title = fecha) +
     coord_sf(expand = FALSE) +
-    theme_void() +
+    theme_void(base_size = 5) +
     theme(
       text = element_text(family = "Lato", color = "white"),
+      plot.margin = margin(0, 0, 0, 0, "pt"),
       plot.background = element_rect(fill = "grey40", color = NA),
       plot.title = element_text(hjust = 1),
       legend.background = element_blank(),
-      legend.key.height = unit(25, "pt"),
+      legend.key.height = unit(14, "pt"),
+      legend.key.width = unit(7, "pt"),
       legend.text = element_text(family = "Fira Code"),
       legend.box.spacing = unit(2, "pt")
     )
@@ -489,10 +503,10 @@ Con las imágenes individuales se generó la siguiente animación.
 ```{r}
 if (FALSE) {
   l_wst <- list.files(
-  path = "figuras/wst2/",
-  pattern = "png",
-  full.names = TRUE
-)
+    path = "figuras/wst2/",
+    pattern = "png",
+    full.names = TRUE
+  )
 
   av::av_encode_video(
     input = l_wst,
@@ -506,7 +520,7 @@ if (FALSE) {
 
 ::: {#fig-wst}
 
-![](videos/wst.mp4){loop="true"}
+![](videos/wst2.mp4){loop="true"}
 
 Animación de WST.
 
@@ -515,31 +529,28 @@ Animación de WST.
 ::::
 
 ```{r}
-#| eval: true
-#| results: asis
+estado_nubes <- r_tbl |> 
+  mutate(estado = case_when(
+    nro %in% todas_despejado ~ "despejado",
+    nro %in% todas_nubes ~ "nubes",
+    nro %in% todas_nubes_parciales ~ "nubes_parciales",
+  )) |> 
+  select(-x) |> 
+  mutate(año = year(fecha)) |> 
+  mutate(estado = fct_rev(fct_infreq(estado))) |> 
+  count(estado, año) |> 
+  arrange(año, estado) |> 
+  pivot_wider(
+    names_from = estado,
+    values_from = n,
+    values_fill = 0
+  ) |> 
+  mutate(
+    lista = pmap(list(nubes, nubes_parciales, despejado), c)
+  ) |> 
+  select(año, lista)
 
-# estado_nubes <- r_tbl |> 
-#   mutate(estado = case_when(
-#     nro %in% todas_despejado ~ "despejado",
-#     nro %in% todas_nubes ~ "nubes",
-#     nro %in% todas_nubes_parciales ~ "nubes_parciales",
-#   )) |> 
-#   select(-x) |> 
-#   mutate(año = year(fecha)) |> 
-#   mutate(estado = fct_rev(fct_infreq(estado))) |> 
-#   count(estado, año) |> 
-#   arrange(año, estado) |> 
-#   pivot_wider(
-#     names_from = estado,
-#     values_from = n,
-#     values_fill = 0
-#   ) |> 
-#   mutate(
-#     lista = pmap(list(nubes, nubes_parciales, despejado), c)
-#   ) |> 
-#   select(año, lista)
-
-# saveRDS(estado_nubes, "datos/estado_nubes.rds")
+saveRDS(estado_nubes, "datos/estado_nubes.rds")
 
 estado_nubes <- readRDS("datos/estado_nubes.rds")
 
@@ -548,7 +559,7 @@ estado_nubes |>
   gt_plt_bar_stack(
     lista,
     labels = c("Nubes", "Nubes parciales", "Despejado"),
-    palette = c("#AD1519", "#006F46", "black")
+    palette = c(c1, "#006F46", "black")
   ) |> 
   tab_style(
     locations = cells_body(columns = año),
@@ -565,22 +576,9 @@ estado_nubes |>
   as_raw_html()
 ```
 
-## Serie temporal
+## Serie temporal {#sec-serie-temporal}
 
 ```{r}
-
-puntos_df <- data.frame(
-  lon = c(0.663324, 0.748562, 0.870385),
-  lat = c(40.649642, 40.776801, 40.734966),
-  sitio = c("P1", "P2", "P3")
-)
-
-puntos_v <- vect(
-  x = puntos_df, crs = "EPSG:4326",
-  geom = c("lon", "lat")
-) |> 
-  project("EPSG:32631")
-
 d_wst <- r_clean_tbl |> 
   mutate(
     b10 = map(x_clean, ~.x[["ST_B10"]])
@@ -600,30 +598,126 @@ d_wst <- r_clean_tbl |>
   mutate(ID = paste0("P", ID))
 
 write_csv(d_wst, "datos/wst.csv")
+```
+
+La serie temporal muestra patrones anuales de `WST`, siguiendo las estaciones del año. En invierno, los menores valores y en verano, los mayores.
+
+```{r}
 d_wst <- read_csv("datos/wst.csv", show_col_types = FALSE)
 
-ggplot(d_wst, aes(fecha, wst, color = ID)) +
-  geom_line() +
-  geom_point() +
+eje_x <- expand_grid(
+  año = year(min(d_wst$fecha)):year(max(d_wst$fecha)),
+  mes = c(1, 7),
+  dia = 1
+) |> 
+  mutate(
+    fecha = make_date(año, mes, dia)
+  ) |> 
+  pull(fecha)
+
+g_timeseries <- d_wst |> 
+  ggplot(aes(fecha, wst, color = ID)) +
+  geom_line(alpha = .8, linewidth = .6, lineend = "round") +
   scale_x_date(
-    date_breaks = "3 month",
-    labels = scales::label_date_short()
+    breaks = eje_x,
+    labels = scales::label_date_short(format = c("%Y", "%m")),
+    limits = c(ymd(20130101), ymd(20260101)),
+    expand = expansion(0, 0),
   ) +
-  theme_bw() +
+  scale_y_continuous(
+    limits = c(4, 34),
+    breaks = seq(4, 34, 2),
+    expand = expansion(0, 0)
+  ) +
+  scale_color_manual(
+    values = c(cp1, cp2, cp3, cp4)
+  ) +
+  labs(x = NULL, y = "WST (°C)", color = NULL) +
+  theme_bw(base_family = "Noto", base_size = 9) +
   theme(
-    panel.grid.minor = element_blank()
+    aspect.ratio = .4,
+    text = element_text(color = "black"),
+    plot.background = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "grey70", linewidth = .1), 
+    axis.text = element_text(family = "Fira Code", color = "black"),
+    legend.background = element_blank(),
+    legend.position = "right",
+    legend.justification.right = "bottom",
+    legend.box.spacing = unit(0, "pt"),
   )
 
-ggplot(d_wst, aes(ID, wst)) +
-  geom_point(
-    position = position_jitter(width = .2, seed = 2025), alpha = .4
-  ) +
-  stat_summary(fun = "median", geom = "point", color = "red", size = 5) +
-  theme_bw() +
-  theme(
-    aspect.ratio = 1
-  )
+ggsave(
+  plot = g_timeseries,
+  filename = "figuras/serie_temporal_wst.png",
+  width = 20,
+  height = 8,
+  units = "cm"
+)
+
+# browseURL(paste0(getwd(), "/figuras/serie_temporal_wst.png"))
 ```
+
+::: {.column-page-inset-right}
+
+![Serie temporal de `WST` para los cuatro sitios de interés](figuras/serie_temporal_wst.png){#fig-serie-temporal-wst}
+
+:::
+
+Se tomaron los valores correspondientes a enero y julio para generar la siguiente figura. Los puntos corresponden con los mostrados en la figura [-@fig-roi]
+
+```{r}
+g_boxplot <- d_wst |> 
+  mutate(
+    estacion = case_when(
+      month(fecha) == 7 ~ "Verano",
+      month(fecha) == 1 ~ "Invierno"
+    )
+  ) |> 
+  drop_na() |> 
+  mutate(ID = fct_reorder(ID, wst)) |> 
+  ggplot(aes(ID, wst, fill = ID)) +
+  geom_boxplot(
+    color = "black", linewidth = .2, outlier.alpha = .4, show.legend = FALSE
+  ) +
+  facet_wrap(vars(estacion), nrow = 1) +
+  scale_y_continuous(
+    limits = c(5, 35),
+    breaks = seq(5, 35, 2)
+  ) +
+  scale_fill_manual(
+    values = c(cp1, cp2, cp3, cp4),
+  ) +
+  labs(x = NULL, y = "WST (°C)") +
+  theme_bw(base_size = 10, base_family = "Noto") +
+  theme(
+    aspect.ratio = 1.3,
+    plot.background = element_blank(),
+    text = element_text(color = "black"),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(color = "grey70", linewidth = .1),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text = element_text(family = "Fira Code", color = "black"),
+    strip.background = element_blank(),
+    strip.text = element_text(color = "black", size = rel(1.2), face = "bold")
+  )
+
+ggsave(
+  plot = g_boxplot,
+  filename = "figuras/boxplot_wst.png",
+  width = 15,
+  height = 10,
+  units = "cm"
+)
+
+browseURL(paste0(getwd(), "/figuras/boxplot_wst.png"))
+```
+
+![Diferencias entre invierno y verano en los puntos de interés](figuras/boxplot_wst.png){#fig-boxplot-wst}
 
 ```{r}
 m <- r_clean_tbl |> 
@@ -667,47 +761,47 @@ map(
   )
 
 ggplot() +
-    geom_spatraster(
-      data = r_mediana[[10]], maxcell = prod(dim(r_mediana[[1]]))
-    ) +
-    scale_fill_gradient2(
-      low = "#1A318B",
-      mid = "white",
-      high = "#9A153D",
-      na.value = "grey10",
-      midpoint = (-21+30)/2,
-      limits = c(-21, 30),
-      breaks = seq(-21, 30, 5),
-      name = "Temp. (°C)"
-    ) +
-    annotation_north_arrow(
-      height = unit(1, "cm"),
-      width = unit(1, "cm"),
-      pad_x = unit(.5, "cm"),
-      pad_y = unit(.5, "cm"),
-      location = "tl",
-      style = north_arrow_fancy_orienteering(
-        line_col = "white",
-        text_col = "white"
-      )
-    ) +
-    annotation_scale(
-      pad_x = unit(.5, "cm"),
-      pad_y = unit(.5, "cm"),
-      location = "br"
-    ) +
-    # labs(title = fecha) +
-    coord_sf(expand = FALSE) +
-    theme_void() +
-    theme(
-      text = element_text(family = "Lato", color = "white"),
-      plot.background = element_rect(fill = "grey40", color = NA),
-      plot.title = element_text(hjust = 1),
-      legend.background = element_blank(),
-      legend.key.height = unit(25, "pt"),
-      legend.text = element_text(family = "Fira Code"),
-      legend.box.spacing = unit(2, "pt")
+  geom_spatraster(
+    data = r_mediana[[10]], maxcell = prod(dim(r_mediana[[1]]))
+  ) +
+  scale_fill_gradient2(
+    low = "#1A318B",
+    mid = "white",
+    high = "#9A153D",
+    na.value = "grey10",
+    midpoint = (-21+30)/2,
+    limits = c(-21, 30),
+    breaks = seq(-21, 30, 5),
+    name = "Temp. (°C)"
+  ) +
+  annotation_north_arrow(
+    height = unit(1, "cm"),
+    width = unit(1, "cm"),
+    pad_x = unit(.5, "cm"),
+    pad_y = unit(.5, "cm"),
+    location = "tl",
+    style = north_arrow_fancy_orienteering(
+      line_col = "white",
+      text_col = "white"
     )
+  ) +
+  annotation_scale(
+    pad_x = unit(.5, "cm"),
+    pad_y = unit(.5, "cm"),
+    location = "br"
+  ) +
+  # labs(title = fecha) +
+  coord_sf(expand = FALSE) +
+  theme_void() +
+  theme(
+    text = element_text(family = "Lato", color = "white"),
+    plot.background = element_rect(fill = "grey40", color = NA),
+    plot.title = element_text(hjust = 1),
+    legend.background = element_blank(),
+    legend.key.height = unit(25, "pt"),
+    legend.text = element_text(family = "Fira Code"),
+    legend.box.spacing = unit(2, "pt")
+  )
 ```
 
 
