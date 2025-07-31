@@ -420,7 +420,7 @@ Se definió una función auxiliar para generar los mapas de distribución espaci
 
 ```{r}
 ancho <- 1000
-alto <- round(ancho * (1080 / 1267))
+alto <- round(ancho * (813/999))
 
 f_wst <- function(raster) {
   wst <- 0.00341802*raster$ST_B10+149-273.15
@@ -463,10 +463,11 @@ f_wst <- function(raster) {
       )
     ) +
     annotation_scale(
-      pad_x = unit(.25, "cm"),
-      pad_y = unit(.25, "cm"),
+      line_width = .4,
+      pad_x = unit(.1, "cm"),
+      pad_y = unit(.1, "cm"),
       location = "br",
-      text_cex = .5,
+      text_cex = .4,
       height = unit(0.1, "cm")
     ) +
     labs(title = fecha) +
@@ -476,7 +477,7 @@ f_wst <- function(raster) {
       text = element_text(family = "Lato", color = "white"),
       plot.margin = margin(0, 0, 0, 0, "pt"),
       plot.background = element_rect(fill = "grey40", color = NA),
-      plot.title = element_text(hjust = 1),
+      plot.title = element_text(hjust = .5),
       legend.background = element_blank(),
       legend.key.height = unit(14, "pt"),
       legend.key.width = unit(7, "pt"),
