@@ -1,0 +1,68 @@
+/*-- scss:defaults --*/
+
+// Yeseva One
+@import url('https://fonts.googleapis.com/css2?family=Yeseva+One&display=swap');
+
+// Oswald
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap');
+
+// Fira Code
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap');
+
+// Noto
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap');
+
+
+$rojo: #AD1519;
+$verde: #006F46;
+$gris-claro: #FAFAFA;
+
+$body-bg: $gris-claro;
+$link-color: $verde;
+
+$font-family-monospace: Fira Code;
+$font-family-sans-serif: Noto Sans;
+
+/*-- scss:rules --*/
+
+h1.title {
+  color: $verde;
+  font-weight: bold;
+  font-family: Yeseva One;
+  font-size: 3.5em;
+}
+
+h1, h2, h3, h4, h5 {
+  font-family: Oswald;
+}
+
+.header-section-number {
+  color: $rojo;
+}
+
+a {
+  text-decoration: underline 1px transparent;
+  &:hover {
+    text-decoration: underline 1px $verde;
+  }
+}
+
+#title-block-header.quarto-title-block.default .quarto-title-meta-heading {
+  font-weight: bold;
+}
+
+div.callout-note.callout {
+    border-left-color: $rojo;
+}
+
+div.callout-note.callout-style-default>.callout-header {
+    background-color: transparent;
+}
+
+.callout .callout-title-container {
+    color: $rojo;
+}
+
+details>summary {
+    color: #CCCCCC;
+}
