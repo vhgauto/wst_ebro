@@ -1,0 +1,713 @@
+---
+title: "Delta del Ebro - WST"
+format: 
+  html:
+    embed-resources: true
+    toc: true
+    toc-location: left
+    toc-title: Contenido
+    number-sections: true
+    link-external-newwindow: true
+    html-math-method: katex
+    link-external-icon: false
+    highlight-style: kate
+    code-fold: true
+    code-summary: Mostrar código
+    crossrefs-hover: false
+    lang: es
+    language: 
+      es:
+        title-block-author-plural: "Autores"
+    theme: estilo.scss
+crossref: 
+  chapters: true
+execute: 
+  eval: false
+  echo: true
+  warning: false
+editor_options: 
+  chunk_output_type: console
+author: 
+  - name: Víctor Gauto
+    corresponding: victor.gauto@outlook.com
+    orcid: 0000-0001-9960-8558
+    affiliation:
+      - name: GISTAQ
+        url: https://www.instagram.com/gistaq.utn/
+  - name: Matías Bonansea
+    orcid: 0000-0003-1953-2595
+    affiliation:
+      - name: ICBIA
+        url: https://icbia.conicet.gov.ar/
+  - name: Càrol Puig-Polo
+    orcid: 0000-0002-8820-6446
+    affiliation:
+      - name: Universitat Politècnica de Catalunya
+        url: https://www.upc.edu/es
+date: last-modified
+---
+
+```{r}
+#| eval: true
+
+library(gt)
+library(gtExtras)
+library(terra)
+library(tidyterra)
+library(ggspatial)
+library(tidyverse)
+```
+
+# Región de estudio {#sec-roi}
+
+Imagen a color real del Delta del Río Ebro, España, sobre el Mar Mediterráneo.
+
+::: {.column-page-inset-right}
+
+![Región de interés en el Delta del Ebro.](figuras/roi.png){#fig-roi}
+
+:::
+
+# Datos espectrales {#sec-datos-espectrales}
+
+Se describe el producto satelital empleado, las bandas de interés y el mecanismo de obtención de los datos.
+
+## Producto satelital
+
+El [producto](https://developers.google.com/earth-engine/datasets/catalog/LANDSAT_LC08_C02_T1_L2) corresponde con la plataforma Landsat 8, sensores OLI/TIRS, nivel 2, con corrección atmosférica en reflectancia de superficie.
+
+Las bandas seleccionadas son las del espectro visible (`B2`, `B3`, `B4`) y temperatura (`B10`). El rango temporal abarca desde 2013 hasta 2025.
+
+## Cálculo de `WST`
+
+Los valores de píxel de `B10` deben ser convertidos a temperatura ($°C$) mediante la siguiente expresión [[Factores de escala Landsat 8 nivel 2](https://www.usgs.gov/faqs/how-do-i-use-a-scale-factor-landsat-level-2-science-products)]{.aside}:
+
+$$
+WST(°C)=0.00341802\cdot B10-124.15
+$$ {#eq-wst}
+
+<!-- WST(°C) = 0.00341802\cdot B10+149-273.15 -->
+
+## Obtención del producto
+
+Mediante un [script](https://code.earthengine.google.com/fabeee05b4315b183e76525a0b60d155?noload=true) en <b>Google Earth Engine</b> se descargaron todos los productos Landsat 8. Se indicó el vector para recortar las imágenes (@fig-roi) y las bandas de interés.
+
+Se obtuvieron `{r} length(list.files(path = "rasters/", pattern = "_198032_"))` productos recortados.
+
+## Detección de agua
+
+La identificación de los píxeles de agua, bajo cielo despejado, se realizó mediante la banda de calidad (`QA_PIXEL`). Esta banda es una [máscara de bits](https://www.usgs.gov/landsat-missions/landsat-collection-2-quality-assessment-bands) que contiene información de la escena.
+
+El valor de píxel seleccionado fue $21952$, correspondiente a ausencia de nubes y sombras, sobre agua. [[Landsat 8-9 OLI/TIRS Collection 2 Level 2 Data Format Control Book](https://d9-wret.s3.us-west-2.amazonaws.com/assets/palladium/production/s3fs-public/media/files/LSDS-1328_Landsat8-9_OLI-TIRS-C2-L2_DFCB-v7.pdf)]{.aside}
+
+# Presencia de nubes
+
+Se leyeron los rásters descargados y a partir de la banda de calidad se identifican los píxeles aptos.
+
+Se descartaron los productos totalmente cubiertos de nubes.
+
+```{r}
+r_archivos <- list.files(
+  path = "rasters/",
+  pattern = "tif",
+  full.names = TRUE
+)
+
+r_rast <- map(r_archivos, rast)
+
+f_mask <- function(x) {
+  m <- ifel(x$QA_PIXEL == 21952, 1, NA)
+  
+  if (is.na(terra::global(m, na.rm = TRUE)$mean)) {
+    r <- NULL
+  } else {
+    r <- x * m
+  }
+  
+  return(r)
+}
+
+r_mask <- map(r_rast, f_mask, .progress = TRUE)
+
+r_agua <- tibble(
+  x = r_mask
+) |>
+  mutate(raster = map_lgl(x, is.null)) |>
+  filter(!raster) |>
+  pull(x)
+```
+
+Con los productos restantes, se calculó el área disponible. Se definió como imagen despejada aquellas que tenían al menos el 70% de su superficie despejada. Aquellas que superaban el 30% de nubes se identificaron con nubosidad parcial.
+
+```{r}
+f_area <- function(x) {
+  print(varnames(x))
+  tibble(
+    area = expanse(x$QA_PIXEL)$area,
+    fecha = str_sub(varnames(x), 13, 20) |> ymd()
+  )
+}
+
+# area_delta <- map(r_agua, f_area, .progress = TRUE) |>
+#   list_rbind()
+# 
+# write_csv(area_delta, "datos/area_delta.csv")
+area_delta <- read_csv("datos/area_delta.csv", show_col_types = FALSE)
+
+max_area <- max(area_delta$area)
+
+fechas_nubes_parciales <- area_delta |>
+  slice_min(order_by = area, n = 4) |>
+  pull(fecha)
+
+areas <- area_delta |>
+  mutate(nro = row_number()) |>
+  filter(area >= max_area * .7) |>
+  pull(nro)
+
+r_clean <- tibble(
+  x = r_agua
+) |>
+  mutate(nro = row_number()) |>
+  filter(nro %in% areas) |>
+  pull(x)
+```
+
+Se definieron funciones auxiliares para obtener las fechas de los productos Landsat y generar y almacenar las representaciones de color real de los rásters. 
+
+```{r}
+f_fecha <- function(x) {
+  varnames(x) |>
+    str_sub(-8) |>
+    ymd()
+}
+
+f_rgb <- function(x, carpeta) {
+  tit <- f_fecha(r_rast[[x]])
+  unlink(paste0("figuras/", carpeta))
+
+  png(
+    width = 1000,
+    height = round(1000 * 481 / 524),
+    units = "px",
+    bg = "transparent",
+    filename = paste0("figuras/", carpeta, "/", tit, ".png")
+  )
+
+  terra::plotRGB(
+    r_rast[[x]],
+    r = 3,
+    g = 2,
+    b = 1,
+    smooth = FALSE,
+    stretch = "lin",
+    mar = c(1, 1, 4, 1),
+    main = as.character(tit),
+    cex.main = 2.5
+  )
+
+  dev.off()
+}
+```
+
+Resumiendo la clasificación de acuerdo con la cobertura de nubes:
+
+::: {.callout-note collapse=false icon=false}
+
+## Clasificación por nubes
+
+- Imágenes con cielo despejado: la cobertura de nubes no supera el 30% de la superficie (al menos el 70% del área está descubierta).
+
+- Imágenes con cielo parcialmente nublado: la cobertura de nubes supera el 30% de la superficie
+
+- Imágenes totalmente nubladas: la cobertura nubosa abarca toda la región de estudio.
+
+:::
+
+Se muestra a continuación animaciones que muestran una imagen a color real por cada fecha, de acuerdo con la clasificación dada.
+
+## Imágenes totalmente nubladas
+
+En total, se identificaron `{r} length(list.files("figuras/nubes_png/"))` escenas con nubes.
+
+```{r}
+r_tbl <- tibble(
+  x = r_rast
+) |>
+  mutate(
+    fecha = map(x, f_fecha) |> list_c()
+  ) |>
+  mutate(nro = row_number())
+
+r_agua_tbl <- tibble(
+  x_agua = r_agua
+) |>
+  mutate(
+    fecha = map(x_agua, f_fecha) |> list_c()
+  )
+
+todas_nubes <- anti_join(r_tbl, r_agua_tbl, by = join_by(fecha)) |>
+  pull(nro)
+
+if (FALSE) {
+  walk(todas_nubes, ~ f_rgb(.x, "nubes_png"), .progress = TRUE)
+
+  l_nubes <- list.files(
+    path = "figuras/nubes_png/",
+    pattern = "png",
+    full.names = TRUE
+  )
+  
+  av::av_encode_video(
+    input = l_nubes,
+    framerate = 2,
+    output = "videos/nubes.mp4"
+  )
+}
+```
+
+::: {.callout-note collapse=true icon=false}
+
+## Imágenes totalmente cubiertas de nubes
+
+::: {#fig-nubosidad-total}
+
+![](videos/nubes.mp4){loop="true"}
+
+Totalmente cubierto.
+
+:::
+
+:::
+
+## Imágenes con cielo parcialmente nublado
+
+Se identificaron `{r} length(list.files("figuras/nubes_parciales_png/"))` fechas con cobertura parcial de nubes.
+
+```{r}
+r_clean_tbl <- tibble(
+  x_clean = r_clean
+) |>
+  mutate(
+    fecha = map(x_clean, f_fecha) |> list_c()
+  )
+
+todas_nubes_parciales <- anti_join(r_tbl, r_clean_tbl, by = join_by(fecha)) |>
+  inner_join(r_agua_tbl, by = join_by(fecha)) |>
+  pull(nro)
+
+if (FALSE) {
+  walk(
+  todas_nubes_parciales,
+  ~ f_rgb(.x, "nubes_parciales_png"),
+  .progress = TRUE
+  )
+
+  l_nubes_parciales <- list.files(
+    path = "figuras/nubes_parciales_png/",
+    pattern = "png",
+    full.names = TRUE
+  )
+  
+  av::av_encode_video(
+    input = l_nubes_parciales,
+    framerate = 2,
+    output = "videos/nubes_parciales.mp4"
+  )
+}
+
+```
+
+::: {.callout-note collapse=true icon=false}
+
+## Imágenes parcialmente cubiertas de nubes
+
+::: {#fig-nubosidad-parcial}
+
+![](videos/nubes_parciales.mp4){loop="true"}
+
+Parcialmente cubierto.
+
+:::
+
+:::
+
+## Imágenes con cielo despejado {#sec-cielo-despejado}
+
+Hubo `{r} length(list.files("figuras/despejado_png/"))` fechas con cielo despejado, teniendo una cobertura de nubes menor al 30%.
+
+```{r}
+r_clean_tbl <- tibble(
+  x_clean = r_clean
+) |>
+  mutate(
+    fecha = map(x_clean, f_fecha) |> list_c()
+  )
+
+todas_despejado <- inner_join(r_tbl, r_clean_tbl, by = join_by(fecha)) |>
+  pull(nro)
+
+if (FALSE) {
+  walk(todas_despejado, ~ f_rgb(.x, "despejado_png"), .progress = TRUE)
+
+  l_despejado <- list.files(
+    path = "figuras/despejado_png/",
+    pattern = "png",
+    full.names = TRUE
+  )
+  
+  av::av_encode_video(
+    input = l_despejado,
+    framerate = 2,
+    output = "videos/despejado.mp4"
+  )
+}
+```
+
+::: {.callout-note collapse=true icon=false}
+
+## Imágenes despejadas
+
+::: {#fig-despejadas}
+
+![](videos/despejado.mp4){loop="true"}
+
+Cielo despejado.
+
+:::
+
+:::
+
+# `WST`
+
+Aplicando la ecuación [-@eq-wst] a cada píxel, obteniendo la temperatura superficial del agua (`WST`), en $°C$.
+
+Se crearon mapas de `WST` para evaluar la distribución espacial y series temporales de sitios fijos.
+
+## Mapas
+
+Empleando únicamente las imágenes con cielo despejado (@sec-cielo-despejado), se aplicó la ecuación [-@eq-wst] a cada píxel obteniendo la temperatura superficial del agua (`WST`), en $°C$.
+
+En cada mapa de `WST` se mantuvo el mismo gradiente de color, a fin de facilitar la comparación entre fechas.
+
+```{r}
+f_wst_rango <- function(raster) {
+  global(raster$ST_B10, c("min", "max"), na.rm = TRUE) |> 
+    mutate(fecha = ymd(str_sub(varnames(raster), -8))) |> 
+    as_tibble()
+}
+
+rango_tbl <- map(r_clean, f_wst_rango) |> 
+  list_rbind()
+
+wst_min <- floor(0.00341802*min(rango_tbl$min)+149-273.15)
+wst_max <- ceiling(0.00341802*max(rango_tbl$max)+149-273.15)
+
+escala <- (wst_max - wst_min)/100
+wst_minino <- ceiling(2*escala + wst_min)
+wst_maximo <- floor(98*escala+wst_min)
+```
+
+Se definió una función auxiliar para generar los mapas de distribución espacial de `WST`.
+
+```{r}
+ancho <- 2000
+alto <- ancho * (1080 / 1267)
+
+f_wst <- function(raster) {
+  wst <- 0.00341802*raster$ST_B10+149-273.15
+  ext_df <- global(wst, c("min", "max"), na.rm = TRUE)
+  ext_min <- floor(ext_df$min)
+  ext_max <- ceiling(ext_df$max)
+  fecha <- ymd(str_sub(varnames(wst), -8))
+
+  g_wst <- ggplot() +
+    geom_spatraster(
+      data = wst, maxcell = prod(dim(wst))
+    ) +
+    scale_fill_gradient2(
+      low = "#1A318B",
+      mid = "white",
+      high = "#9A153D",
+      na.value = "grey10",
+      labels = scales::label_number(
+        big.mark = ".", decimal.mark = ",", scale = .1
+      ),
+      # midpoint = (wst_minino+wst_maximo)/2,
+      # limits = c(wst_minino, wst_maximo),
+      # breaks = seq(wst_minino, wst_maximo, 5),
+      midpoint = (ext_min+ext_max)/2,
+      limits = c(ext_min, ext_max),
+      breaks = seq(ext_min, ext_max, length.out = 5),
+      name = "Temp. (°C)"
+    ) +
+    annotation_north_arrow(
+      height = unit(1, "cm"),
+      width = unit(1, "cm"),
+      pad_x = unit(.5, "cm"),
+      pad_y = unit(.5, "cm"),
+      location = "tl",
+      style = north_arrow_fancy_orienteering(
+        line_col = "white",
+        text_col = "white"
+      )
+    ) +
+    annotation_scale(
+      pad_x = unit(.5, "cm"),
+      pad_y = unit(.5, "cm"),
+      location = "br"
+    ) +
+    labs(title = fecha) +
+    coord_sf(expand = FALSE) +
+    theme_void() +
+    theme(
+      text = element_text(family = "Lato", color = "white"),
+      plot.background = element_rect(fill = "grey40", color = NA),
+      plot.title = element_text(hjust = 1),
+      legend.background = element_blank(),
+      legend.key.height = unit(25, "pt"),
+      legend.text = element_text(family = "Fira Code"),
+      legend.box.spacing = unit(2, "pt")
+    )
+
+  ggsave(
+    plot = g_wst,
+    filename = paste0("figuras/wst2/", fecha, ".png"),
+    width = ancho,
+    height = alto,
+    units = "px"
+  )
+}
+
+if  (FALSE) {
+  walk(r_clean, f_wst, .progress = TRUE)
+}
+```
+
+Con las imágenes individuales se generó la siguiente animación.
+
+```{r}
+if (FALSE) {
+  l_wst <- list.files(
+  path = "figuras/wst2/",
+  pattern = "png",
+  full.names = TRUE
+)
+
+  av::av_encode_video(
+    input = l_wst,
+    framerate = 2,
+    output = "videos/wst2.mp4"
+  )
+}
+```
+
+:::: {.column-page-inset-right}
+
+::: {#fig-wst}
+
+![](videos/wst.mp4){loop="true"}
+
+Animación de WST.
+
+:::
+
+::::
+
+```{r}
+#| eval: true
+#| results: asis
+
+# estado_nubes <- r_tbl |> 
+#   mutate(estado = case_when(
+#     nro %in% todas_despejado ~ "despejado",
+#     nro %in% todas_nubes ~ "nubes",
+#     nro %in% todas_nubes_parciales ~ "nubes_parciales",
+#   )) |> 
+#   select(-x) |> 
+#   mutate(año = year(fecha)) |> 
+#   mutate(estado = fct_rev(fct_infreq(estado))) |> 
+#   count(estado, año) |> 
+#   arrange(año, estado) |> 
+#   pivot_wider(
+#     names_from = estado,
+#     values_from = n,
+#     values_fill = 0
+#   ) |> 
+#   mutate(
+#     lista = pmap(list(nubes, nubes_parciales, despejado), c)
+#   ) |> 
+#   select(año, lista)
+
+# saveRDS(estado_nubes, "datos/estado_nubes.rds")
+
+estado_nubes <- readRDS("datos/estado_nubes.rds")
+
+estado_nubes |> 
+  gt() |> 
+  gt_plt_bar_stack(
+    lista,
+    labels = c("Nubes", "Nubes parciales", "Despejado"),
+    palette = c("#AD1519", "#006F46", "black")
+  ) |> 
+  tab_style(
+    locations = cells_body(columns = año),
+    style = cell_text(font = "Fira Code")
+  ) |> 
+  cols_label(
+    1 ~ "Año",
+    2 ~ "<div><span style='color:#AD1519'><b>Nubes</b></span>||<span style='color:#006F46'><b>Nubes parciales</b></span>||<span style='color:black'><b>Despejado</b></span></div>"
+  ) |> 
+  cols_label_with(fn = gt::html) |> 
+  tab_options(
+    table.width = 400
+  ) |> 
+  as_raw_html()
+```
+
+## Serie temporal
+
+```{r}
+
+puntos_df <- data.frame(
+  lon = c(0.663324, 0.748562, 0.870385),
+  lat = c(40.649642, 40.776801, 40.734966),
+  sitio = c("P1", "P2", "P3")
+)
+
+puntos_v <- vect(
+  x = puntos_df, crs = "EPSG:4326",
+  geom = c("lon", "lat")
+) |> 
+  project("EPSG:32631")
+
+d_wst <- r_clean_tbl |> 
+  mutate(
+    b10 = map(x_clean, ~.x[["ST_B10"]])
+  ) |> 
+  mutate(
+    raster3x3 = map(b10, ~focal(.x, w = 3, fun = "mean"))
+  ) |> 
+  mutate(
+    temp = map(raster3x3, ~terra::extract(.x, puntos_v))
+  ) |> 
+  unnest(temp) |> 
+  mutate(
+    wst = 0.00341802*focal_mean-124.15
+  ) |> 
+  drop_na() |> 
+  select(fecha, ID, wst) |> 
+  mutate(ID = paste0("P", ID))
+
+write_csv(d_wst, "datos/wst.csv")
+d_wst <- read_csv("datos/wst.csv", show_col_types = FALSE)
+
+ggplot(d_wst, aes(fecha, wst, color = ID)) +
+  geom_line() +
+  geom_point() +
+  scale_x_date(
+    date_breaks = "3 month",
+    labels = scales::label_date_short()
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor = element_blank()
+  )
+
+ggplot(d_wst, aes(ID, wst)) +
+  geom_point(
+    position = position_jitter(width = .2, seed = 2025), alpha = .4
+  ) +
+  stat_summary(fun = "median", geom = "point", color = "red", size = 5) +
+  theme_bw() +
+  theme(
+    aspect.ratio = 1
+  )
+```
+
+```{r}
+m <- r_clean_tbl |> 
+  mutate(
+    b10 = map(x_clean, ~.x[["ST_B10"]])
+  ) |> 
+  mutate(
+    m = map(b10, ~global(.x, median, na.rm = TRUE))
+  ) |> 
+  unnest(m) |> 
+  mutate(
+    m = 0.00341802*global-124.15
+  ) |> 
+  select(fecha, m) |> 
+  reframe(
+    mediana = median(m)
+  ) |> 
+  pull(mediana)
+
+r_mediana <- r_clean_tbl |> 
+  mutate(
+    b10 = map(x_clean, ~.x[["ST_B10"]])
+  ) |> 
+  mutate(
+    wst = map(b10, ~0.00341802*.x-124.15)
+  ) |> 
+  mutate(
+    dif = map(wst, ~ .x - m)
+  ) |> 
+  pull(dif)
+
+map(
+  r_mediana,
+  ~global(.x, c("min", "max"), na.rm = TRUE)
+) |> 
+  list_rbind() |> 
+  as_tibble() |> 
+  reframe(
+    min = min(min),
+    max = max(max)
+  )
+
+ggplot() +
+    geom_spatraster(
+      data = r_mediana[[10]], maxcell = prod(dim(r_mediana[[1]]))
+    ) +
+    scale_fill_gradient2(
+      low = "#1A318B",
+      mid = "white",
+      high = "#9A153D",
+      na.value = "grey10",
+      midpoint = (-21+30)/2,
+      limits = c(-21, 30),
+      breaks = seq(-21, 30, 5),
+      name = "Temp. (°C)"
+    ) +
+    annotation_north_arrow(
+      height = unit(1, "cm"),
+      width = unit(1, "cm"),
+      pad_x = unit(.5, "cm"),
+      pad_y = unit(.5, "cm"),
+      location = "tl",
+      style = north_arrow_fancy_orienteering(
+        line_col = "white",
+        text_col = "white"
+      )
+    ) +
+    annotation_scale(
+      pad_x = unit(.5, "cm"),
+      pad_y = unit(.5, "cm"),
+      location = "br"
+    ) +
+    # labs(title = fecha) +
+    coord_sf(expand = FALSE) +
+    theme_void() +
+    theme(
+      text = element_text(family = "Lato", color = "white"),
+      plot.background = element_rect(fill = "grey40", color = NA),
+      plot.title = element_text(hjust = 1),
+      legend.background = element_blank(),
+      legend.key.height = unit(25, "pt"),
+      legend.text = element_text(family = "Fira Code"),
+      legend.box.spacing = unit(2, "pt")
+    )
+```
+
+
