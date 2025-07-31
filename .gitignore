@@ -4,6 +4,7 @@ rasters/
 vector/
 esri.tif
 test.*
+wst.tif
 
 # History files
 .Rhistory
