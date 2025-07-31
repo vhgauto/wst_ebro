@@ -24,6 +24,23 @@ roi <- vect("vector/deltaEbro_Temp.shp") |>
 # writeRaster(esri, "raster/esri.tif", overwrite = TRUE)
 esri <- rast("esri.tif")
 
+
+# puntos de interés
+puntos_df <- data.frame(
+  lon = c(0.87483, 0.75172, 0.70245, 0.662106),
+  lat = c(40.74053, 40.77523, 40.62045, 40.650080),
+  sitio = c("P1", "P2", "P3", "P4")
+)
+
+puntos_v <- vect(
+  x = puntos_df, crs = "EPSG:4326",
+  geom = c("lon", "lat")
+) |> 
+  project("EPSG:32631")
+
+writeVector(puntos_v, "vector/puntos_v.gpkg", overwrite = TRUE)
+puntos_v <- vect("vector/puntos_v.gpkg")
+
 # RGB ---------------------------------------------------------------------
 
 # cuadro <- ext(esri)
@@ -37,6 +54,16 @@ g_rgb <- ggplot() +
     data = esri,
     maxcell = dim(esri)[1] * dim(esri)[2]
     # maxcell = 5e5
+  ) +
+  geom_spatvector(
+    data = puntos_v, color = "gold", fill = "black", shape = 21, size = 3
+  ) +
+  geom_spatvector(
+    data = puntos_v, color = "white", size = .3
+  ) +
+  geom_sf_text(
+    data = puntos_v, aes(label = sitio), family = "Fira Code", hjust = 1.75,
+    vjust = .5, color = "white", size = 2.7
   ) +
   annotation_north_arrow(
     height = unit(1, "cm"),
