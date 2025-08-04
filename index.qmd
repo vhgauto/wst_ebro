@@ -34,16 +34,16 @@ author:
     affiliation:
       - name: GISTAQ
         url: https://www.instagram.com/gistaq.utn/
-  - name: Matías Bonansea
-    orcid: 0000-0003-1953-2595
-    affiliation:
-      - name: ICBIA
-        url: https://icbia.conicet.gov.ar/
   - name: Càrol Puig-Polo
     orcid: 0000-0002-8820-6446
     affiliation:
       - name: Universitat Politècnica de Catalunya
         url: https://www.upc.edu/es
+  - name: Matías Bonansea
+    orcid: 0000-0003-1953-2595
+    affiliation:
+      - name: ICBIA
+        url: https://icbia.conicet.gov.ar/
 date: last-modified
 ---
 
@@ -62,6 +62,8 @@ cp1 <- "#FFB04F"
 cp2 <- "#6A359C"
 cp3 <- "#679C35"
 cp4 <- "#CD1076"
+
+puntos_v <- vect("vector/puntos_v.gpkg")
 ```
 
 # Región de estudio {#sec-roi}
@@ -388,7 +390,7 @@ Cielo despejado.
 
 # `WST`
 
-Aplicando la ecuación [-@eq-wst] a cada píxel, obteniendo la temperatura superficial del agua (`WST`), en $°C$.
+Aplicando la ecuación [-@eq-wst] a cada píxel, se obtuvo la temperatura superficial del agua (`WST`), en $°C$.
 
 Se crearon mapas de `WST` para evaluar la distribución espacial y series temporales de sitios fijos.
 
@@ -487,7 +489,7 @@ f_wst <- function(raster) {
 
   ggsave(
     plot = g_wst,
-    filename = paste0("figuras/wst2/", fecha, ".png"),
+    filename = paste0("figuras/wst/", fecha, ".png"),
     width = ancho,
     height = alto,
     units = "px"
@@ -504,7 +506,7 @@ Con las imágenes individuales se generó la siguiente animación.
 ```{r}
 if (FALSE) {
   l_wst <- list.files(
-    path = "figuras/wst2/",
+    path = "figuras/wst/",
     pattern = "png",
     full.names = TRUE
   )
@@ -512,7 +514,7 @@ if (FALSE) {
   av::av_encode_video(
     input = l_wst,
     framerate = 2,
-    output = "videos/wst2.mp4"
+    output = "videos/wst.mp4"
   )
 }
 ```
@@ -521,7 +523,7 @@ if (FALSE) {
 
 ::: {#fig-wst}
 
-![](videos/wst2.mp4){loop="true"}
+![](videos/wst.mp4){loop="true"}
 
 Animación de WST.
 
@@ -666,14 +668,56 @@ ggsave(
 
 :::
 
+La distribución de valores de `WST` para los cuatro sitios se muestra en los siguientes histogramas.
+
+```{r}
+g_hist <- d_wst |> 
+  ggplot(aes(wst, group = ID, color = ID, fill = ID)) +
+  geom_freqpoly(binwidth = 1, show.legend = FALSE, linewidth = 1) +
+  facet_wrap(vars(ID), nrow = 1) +
+  scale_x_continuous(breaks = scales::breaks_width(5)) +
+  scale_color_manual(
+    values = c(cp1, cp2, cp3, cp4),
+  ) +
+  labs(y = "#", x = "WST (°C)") +
+  theme_bw(base_size = 12, base_family = "Noto") +
+  theme(
+    aspect.ratio = 1.3,
+    plot.background = element_blank(),
+    text = element_text(color = "black"),
+    panel.background = element_blank(),
+    panel.grid.major.y = element_line(color = "grey70", linewidth = .1),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text = element_text(family = "Fira Code", color = "black"),
+    strip.background = element_blank(),
+    strip.text = element_text(color = "black", size = rel(1.2), face = "bold")
+  )
+
+ggsave(
+  plot = g_hist,
+  filename = "figuras/hist_wst.png",
+  width = 25,
+  height = 9,
+  units = "cm"
+)
+```
+
+::: {.column-page-inset-right}
+
+![Histogramas de `WST` por sitio de interés](figuras/hist_wst.png){#fig-hist-wst}
+
+:::
+
 Se tomaron los valores correspondientes a enero y julio para generar la siguiente figura. Los puntos corresponden con los mostrados en la figura [-@fig-roi]
 
 ```{r}
 g_boxplot <- d_wst |> 
   mutate(
     estacion = case_when(
-      month(fecha) == 7 ~ "Verano",
-      month(fecha) == 1 ~ "Invierno"
+      month(fecha) == 7 ~ "Julio",
+      month(fecha) == 1 ~ "Enero"
     )
   ) |> 
   drop_na() |> 
@@ -685,7 +729,7 @@ g_boxplot <- d_wst |>
   facet_wrap(vars(estacion), nrow = 1) +
   scale_y_continuous(
     limits = c(5, 35),
-    breaks = seq(5, 35, 2)
+    breaks = seq(4, 34, 2)
   ) +
   scale_fill_manual(
     values = c(cp1, cp2, cp3, cp4),
@@ -721,22 +765,54 @@ browseURL(paste0(getwd(), "/figuras/boxplot_wst.png"))
 ![Diferencias entre invierno y verano en los puntos de interés](figuras/boxplot_wst.png){#fig-boxplot-wst}
 
 ```{r}
-m <- r_clean_tbl |> 
+m_tbl <- r_clean_tbl |> 
   mutate(
     b10 = map(x_clean, ~.x[["ST_B10"]])
   ) |> 
   mutate(
-    m = map(b10, ~global(.x, median, na.rm = TRUE))
+    wst = map(b10, ~0.00341802*.x-124.15)
+  ) |> 
+  mutate(
+    m = map(wst, ~global(.x, c("mean", "sd"), na.rm = TRUE))
   ) |> 
   unnest(m) |> 
-  mutate(
-    m = 0.00341802*global-124.15
-  ) |> 
-  select(fecha, m) |> 
+  select(fecha, mean, sd) |> 
   reframe(
-    mediana = median(m)
+    wst_mean = mean(mean),
+    wst_sd = mean(sd)
+  )
+
+wst_z_tbl <- r_clean_tbl |> 
+  mutate(
+    b10 = map(x_clean, ~.x[["ST_B10"]])
   ) |> 
-  pull(mediana)
+  mutate(
+    wst = map(b10, ~0.00341802*.x-124.15)
+  ) |> 
+  mutate(
+    wst_z = map(wst, ~(.x - m_tbl$wst_mean)/m_tbl$wst_sd)
+  ) |> 
+  pull(wst_z)
+
+wst_z_rango <- map(
+  wst_z_tbl,
+  \(x) global(x, c("min", "max"), na.rm = TRUE)
+) |> 
+  list_rbind() |> 
+  as_tibble()
+
+z_min <- floor(min(wst_z_rango$min))
+z_max <- ceiling(max(wst_z_rango$max))
+
+ggplot() +
+  geom_spatraster(
+    data = wst_z_tbl[[5]]
+  ) +
+  scale_fill_viridis_c(
+    limits = c(z_min, z_max),
+    option = "turbo"
+  ) +
+  theme_void()
 
 r_mediana <- r_clean_tbl |> 
   mutate(
