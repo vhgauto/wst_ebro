@@ -13,6 +13,10 @@ format:
     highlight-style: kate
     code-fold: true
     code-summary: Mostrar código
+    other-links:
+      - text: Repositorio
+        icon: github
+        href: https://github.com/vhgauto/wst_ebro
     crossrefs-hover: false
     lang: es
     language: 
