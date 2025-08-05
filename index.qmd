@@ -22,7 +22,9 @@ format:
     language: 
       es:
         title-block-author-plural: "Autores"
-    theme: estilo.scss
+    theme: extras/estilo.scss
+    include-in-header:
+      - extras/favicon.html
 crossref: 
   chapters: true
 execute: 
