@@ -14,6 +14,10 @@ library(tidyverse)
 roi <- vect("vector/deltaEbro_Temp.shp") |>
   project("EPSG:4326")
 
+clot <- vect("vector/clot.gpkg") |>
+  ext() |>
+  vect(crs = "EPSG:4326")
+
 # esri <- maptiles::get_tiles(
 #   x = roi,
 #   provider = "Esri.WorldImagery",
@@ -24,7 +28,6 @@ roi <- vect("vector/deltaEbro_Temp.shp") |>
 # writeRaster(esri, "raster/esri.tif", overwrite = TRUE)
 esri <- rast("esri.tif")
 
-
 # puntos de interés
 puntos_df <- data.frame(
   lon = c(0.87483, 0.75172, 0.70245, 0.662106),
@@ -33,9 +36,10 @@ puntos_df <- data.frame(
 )
 
 puntos_v <- vect(
-  x = puntos_df, crs = "EPSG:4326",
+  x = puntos_df,
+  crs = "EPSG:4326",
   geom = c("lon", "lat")
-) |> 
+) |>
   project("EPSG:32631")
 
 writeVector(puntos_v, "vector/puntos_v.gpkg", overwrite = TRUE)
@@ -56,14 +60,39 @@ g_rgb <- ggplot() +
     # maxcell = 5e5
   ) +
   geom_spatvector(
-    data = puntos_v, color = "gold", fill = "black", shape = 21, size = 3
+    data = puntos_v,
+    color = "gold",
+    fill = "black",
+    shape = 21,
+    size = 3
   ) +
   geom_spatvector(
-    data = puntos_v, color = "white", size = .3
+    data = puntos_v,
+    color = "white",
+    size = .3
   ) +
   geom_sf_text(
-    data = puntos_v, aes(label = sitio), family = "Fira Code", hjust = 1.75,
-    vjust = .5, color = "white", size = 2.7
+    data = puntos_v,
+    aes(label = sitio),
+    family = "Fira Code",
+    hjust = 1.75,
+    vjust = .5,
+    color = "white",
+    size = 2.7
+  ) +
+  geom_spatvector(
+    data = clot,
+    color = "white",
+    fill = NA,
+    linetype = 1,
+    linewidth = .4
+  ) +
+  geom_spatvector(
+    data = clot,
+    color = "#AD1519",
+    fill = NA,
+    linetype = 2,
+    linewidth = .4
   ) +
   annotation_north_arrow(
     height = unit(1, "cm"),
@@ -116,7 +145,7 @@ ggsave(
   units = "cm"
 )
 
-browseURL("figuras/roi_rgb.png")
+# browseURL(paste0(getwd(), "/figuras/roi_rgb.png"))
 
 # INSET -------------------------------------------------------------------
 
@@ -184,4 +213,4 @@ roi_rgb |>
     "figuras/roi.png"
   )
 
-browseURL("figuras/roi.png")
+browseURL(paste0(getwd(), "/figuras/roi.png"))
