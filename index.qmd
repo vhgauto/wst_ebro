@@ -76,6 +76,8 @@ Imagen a color real del Delta del Río Ebro, España, sobre el Mar Mediterráneo
 
 Se indican cuatro sitios de interés que luego serán utilizados para evaluar la temperatura superficial del agua (`WST`), generando series temporales (Sección [-@sec-serie-temporal]).
 
+La laguna **El Clot**, dentro del recuadro a trazos, fue analizada de manera particular (sección [-@sec-clot]).
+
 ::: {.column-page-inset-right}
 
 ![Región y sitios de interés en el Delta del Ebro.](figuras/roi.png){#fig-roi}
@@ -131,13 +133,13 @@ r_rast <- map(r_archivos, rast)
 
 f_mask <- function(x) {
   m <- ifel(x$QA_PIXEL == 21952, 1, NA)
-  
+
   if (is.na(terra::global(m, na.rm = TRUE)$mean)) {
     r <- NULL
   } else {
     r <- x * m
   }
-  
+
   return(r)
 }
 
@@ -164,7 +166,7 @@ f_area <- function(x) {
 
 # area_delta <- map(r_agua, f_area, .progress = TRUE) |>
 #   list_rbind()
-# 
+#
 # write_csv(area_delta, "datos/area_delta.csv")
 area_delta <- read_csv("datos/area_delta.csv", show_col_types = FALSE)
 
@@ -271,7 +273,7 @@ if (FALSE) {
     pattern = "png",
     full.names = TRUE
   )
-  
+
   av::av_encode_video(
     input = l_nubes,
     framerate = 2,
@@ -312,9 +314,9 @@ todas_nubes_parciales <- anti_join(r_tbl, r_clean_tbl, by = join_by(fecha)) |>
 
 if (FALSE) {
   walk(
-  todas_nubes_parciales,
-  ~ f_rgb(.x, "nubes_parciales_png"),
-  .progress = TRUE
+    todas_nubes_parciales,
+    ~ f_rgb(.x, "nubes_parciales_png"),
+    .progress = TRUE
   )
 
   l_nubes_parciales <- list.files(
@@ -322,7 +324,7 @@ if (FALSE) {
     pattern = "png",
     full.names = TRUE
   )
-  
+
   av::av_encode_video(
     input = l_nubes_parciales,
     framerate = 2,
@@ -369,7 +371,7 @@ if (FALSE) {
     pattern = "png",
     full.names = TRUE
   )
-  
+
   av::av_encode_video(
     input = l_despejado,
     framerate = 2,
@@ -392,7 +394,7 @@ Cielo despejado.
 
 :::
 
-# `WST`
+# `WST` Delta
 
 Aplicando la ecuación [-@eq-wst] a cada píxel, se obtuvo la temperatura superficial del agua (`WST`), en $°C$.
 
@@ -406,30 +408,36 @@ En cada mapa de `WST` se creó un gradiente de color adaptado, a fin de destacar
 
 ```{r}
 f_wst_rango <- function(raster) {
-  global(raster$ST_B10, c("min", "max"), na.rm = TRUE) |> 
-    mutate(fecha = ymd(str_sub(varnames(raster), -8))) |> 
+  global(raster$ST_B10, c("min", "max"), na.rm = TRUE) |>
+    mutate(fecha = ymd(str_sub(varnames(raster), -8))) |>
     as_tibble()
 }
 
-rango_tbl <- map(r_clean, f_wst_rango) |> 
+rango_tbl <- map(r_clean, f_wst_rango) |>
   list_rbind()
 
-wst_min <- floor(0.00341802*min(rango_tbl$min)+149-273.15)
-wst_max <- ceiling(0.00341802*max(rango_tbl$max)+149-273.15)
+wst_min <- floor(0.00341802 * min(rango_tbl$min) + 149 - 273.15)
+wst_max <- ceiling(0.00341802 * max(rango_tbl$max) + 149 - 273.15)
 
-escala <- (wst_max - wst_min)/100
-wst_minino <- ceiling(2*escala + wst_min)
-wst_maximo <- floor(98*escala+wst_min)
+escala <- (wst_max - wst_min) / 100
+wst_minino <- ceiling(2 * escala + wst_min)
+wst_maximo <- floor(98 * escala + wst_min)
 ```
 
 Se definió una función auxiliar para generar los mapas de distribución espacial de `WST`.
 
 ```{r}
 ancho <- 1000
-alto <- round(ancho * (813/999))
+alto <- round(ancho * (813 / 999))
 
-f_wst <- function(raster) {
-  wst <- 0.00341802*raster$ST_B10+149-273.15
+f_wst <- function(
+  raster,
+  carpeta = "wst",
+  escala_color = "black",
+  tam_x = ancho,
+  tam_y = alto
+) {
+  wst <- 0.00341802 * raster$ST_B10 + 149 - 273.15
   ext_df <- global(wst, c("min", "max"), na.rm = TRUE)
   ext_min <- floor(ext_df$min)
   ext_max <- ceiling(ext_df$max)
@@ -437,7 +445,8 @@ f_wst <- function(raster) {
 
   g_wst <- ggplot() +
     geom_spatraster(
-      data = wst, maxcell = prod(dim(wst))
+      data = wst,
+      maxcell = prod(dim(wst))
     ) +
     scale_fill_gradient2(
       low = "#1A318B",
@@ -445,12 +454,14 @@ f_wst <- function(raster) {
       high = "#9A153D",
       na.value = "grey10",
       labels = scales::label_number(
-        big.mark = ".", decimal.mark = ",", scale = .1
+        big.mark = ".",
+        decimal.mark = ",",
+        scale = .1
       ),
       # midpoint = (wst_minino+wst_maximo)/2,
       # limits = c(wst_minino, wst_maximo),
       # breaks = seq(wst_minino, wst_maximo, 5),
-      midpoint = (ext_min+ext_max)/2,
+      midpoint = (ext_min + ext_max) / 2,
       limits = c(ext_min, ext_max),
       breaks = seq(ext_min, ext_max, length.out = 5),
       name = "WST (°C)"
@@ -474,6 +485,8 @@ f_wst <- function(raster) {
       pad_y = unit(.1, "cm"),
       location = "br",
       text_cex = .4,
+      line_col = escala_color,
+      text_col = escala_color,
       height = unit(0.1, "cm")
     ) +
     labs(title = fecha) +
@@ -493,14 +506,20 @@ f_wst <- function(raster) {
 
   ggsave(
     plot = g_wst,
-    filename = paste0("figuras/wst/", fecha, ".png"),
-    width = ancho,
-    height = alto,
+    filename = paste0(
+      "figuras/",
+      carpeta,
+      "/",
+      fecha,
+      ".png"
+    ),
+    width = tam_x,
+    height = tam_y,
     units = "px"
   )
 }
 
-if  (FALSE) {
+if (FALSE) {
   walk(r_clean, f_wst, .progress = TRUE)
 }
 ```
@@ -529,79 +548,82 @@ if (FALSE) {
 
 ![](videos/wst.mp4){loop="true"}
 
-Animación de WST.
+Animación de `WST`.
 
 :::
 
 ::::
 
 ```{r}
-estado_nubes <- r_tbl |> 
-  mutate(estado = case_when(
-    nro %in% todas_despejado ~ "despejado",
-    nro %in% todas_nubes ~ "nubes",
-    nro %in% todas_nubes_parciales ~ "nubes_parciales",
-  )) |> 
-  select(-x) |> 
-  mutate(año = year(fecha)) |> 
-  mutate(estado = fct_rev(fct_infreq(estado))) |> 
-  count(estado, año) |> 
-  arrange(año, estado) |> 
+estado_nubes <- r_tbl |>
+  mutate(
+    estado = case_when(
+      nro %in% todas_despejado ~ "despejado",
+      nro %in% todas_nubes ~ "nubes",
+      nro %in% todas_nubes_parciales ~ "nubes_parciales",
+    )
+  ) |>
+  select(-x) |>
+  mutate(año = year(fecha)) |>
+  mutate(estado = fct_rev(fct_infreq(estado))) |>
+  count(estado, año) |>
+  arrange(año, estado) |>
   pivot_wider(
     names_from = estado,
     values_from = n,
     values_fill = 0
-  ) |> 
+  ) |>
   mutate(
     lista = pmap(list(nubes, nubes_parciales, despejado), c)
-  ) |> 
+  ) |>
   select(año, lista)
 
 saveRDS(estado_nubes, "datos/estado_nubes.rds")
 
 estado_nubes <- readRDS("datos/estado_nubes.rds")
 
-estado_nubes |> 
-  gt() |> 
+estado_nubes |>
+  gt() |>
   gt_plt_bar_stack(
     lista,
     labels = c("Nubes", "Nubes parciales", "Despejado"),
     palette = c(c1, "#006F46", "black")
-  ) |> 
+  ) |>
   tab_style(
     locations = cells_body(columns = año),
     style = cell_text(font = "Fira Code")
-  ) |> 
+  ) |>
   cols_label(
     1 ~ "Año",
-    2 ~ "<div><span style='color:#AD1519'><b>Nubes</b></span>||<span style='color:#006F46'><b>Nubes parciales</b></span>||<span style='color:black'><b>Despejado</b></span></div>"
-  ) |> 
-  cols_label_with(fn = gt::html) |> 
+    2 ~
+      "<div><span style='color:#AD1519'><b>Nubes</b></span>||<span style='color:#006F46'><b>Nubes parciales</b></span>||<span style='color:black'><b>Despejado</b></span></div>"
+  ) |>
+  cols_label_with(fn = gt::html) |>
   tab_options(
     table.width = 400
-  ) |> 
+  ) |>
   as_raw_html()
 ```
 
 ## Serie temporal {#sec-serie-temporal}
 
 ```{r}
-d_wst <- r_clean_tbl |> 
+d_wst <- r_clean_tbl |>
   mutate(
-    b10 = map(x_clean, ~.x[["ST_B10"]])
-  ) |> 
+    b10 = map(x_clean, ~ .x[["ST_B10"]])
+  ) |>
   mutate(
-    raster3x3 = map(b10, ~focal(.x, w = 3, fun = "mean"))
-  ) |> 
+    raster3x3 = map(b10, ~ focal(.x, w = 3, fun = "mean"))
+  ) |>
   mutate(
-    temp = map(raster3x3, ~terra::extract(.x, puntos_v))
-  ) |> 
-  unnest(temp) |> 
+    temp = map(raster3x3, ~ terra::extract(.x, puntos_v))
+  ) |>
+  unnest(temp) |>
   mutate(
-    wst = 0.00341802*focal_mean-124.15
-  ) |> 
-  drop_na() |> 
-  select(fecha, ID, wst) |> 
+    wst = 0.00341802 * focal_mean - 124.15
+  ) |>
+  drop_na() |>
+  select(fecha, ID, wst) |>
   mutate(ID = paste0("P", ID))
 
 write_csv(d_wst, "datos/wst.csv")
@@ -616,13 +638,13 @@ eje_x <- expand_grid(
   año = year(min(d_wst$fecha)):year(max(d_wst$fecha)),
   mes = c(1, 7),
   dia = 1
-) |> 
+) |>
   mutate(
     fecha = make_date(año, mes, dia)
-  ) |> 
+  ) |>
   pull(fecha)
 
-g_timeseries <- d_wst |> 
+g_timeseries <- d_wst |>
   ggplot(aes(fecha, wst, color = ID)) +
   geom_line(alpha = .8, linewidth = .6, lineend = "round") +
   scale_x_date(
@@ -647,7 +669,7 @@ g_timeseries <- d_wst |>
     plot.background = element_blank(),
     panel.background = element_blank(),
     panel.grid.minor = element_blank(),
-    panel.grid.major = element_line(color = "grey70", linewidth = .1), 
+    panel.grid.major = element_line(color = "grey70", linewidth = .1),
     axis.text = element_text(family = "Fira Code", color = "black"),
     legend.background = element_blank(),
     legend.position = "right",
@@ -675,7 +697,7 @@ ggsave(
 La distribución de valores de `WST` para los cuatro sitios se muestra en los siguientes histogramas.
 
 ```{r}
-g_hist <- d_wst |> 
+g_hist <- d_wst |>
   ggplot(aes(wst, group = ID, color = ID, fill = ID)) +
   geom_freqpoly(binwidth = 1, show.legend = FALSE, linewidth = 1) +
   facet_wrap(vars(ID), nrow = 1) +
@@ -717,18 +739,21 @@ ggsave(
 Se tomaron los valores correspondientes a enero y julio para generar la siguiente figura. Los puntos corresponden con los mostrados en la figura [-@fig-roi]
 
 ```{r}
-g_boxplot <- d_wst |> 
+g_boxplot <- d_wst |>
   mutate(
     estacion = case_when(
       month(fecha) == 7 ~ "Julio",
       month(fecha) == 1 ~ "Enero"
     )
-  ) |> 
-  drop_na() |> 
-  mutate(ID = fct_reorder(ID, wst)) |> 
+  ) |>
+  drop_na() |>
+  mutate(ID = fct_reorder(ID, wst)) |>
   ggplot(aes(ID, wst, fill = ID)) +
   geom_boxplot(
-    color = "black", linewidth = .2, outlier.alpha = .4, show.legend = FALSE
+    color = "black",
+    linewidth = .2,
+    outlier.alpha = .4,
+    show.legend = FALSE
   ) +
   facet_wrap(vars(estacion), nrow = 1) +
   scale_y_continuous(
@@ -763,46 +788,195 @@ ggsave(
   units = "cm"
 )
 
-browseURL(paste0(getwd(), "/figuras/boxplot_wst.png"))
+# browseURL(paste0(getwd(), "/figuras/boxplot_wst.png"))
 ```
 
 ![Diferencias entre invierno y verano en los puntos de interés](figuras/boxplot_wst.png){#fig-boxplot-wst}
 
+# `WST` El Clot {#sec-clot}
+
+El Clot es una laguna dentro del Delta del Ebro. A partir de un recorte a su alrededor se generó la siguiente animación de `WST`.
+
+La animación está compuesta de `{r} length(list.files(path = "figuras/clot/"))` imágenes, correspondientes a las fechas con cielo despejado sobre el agua.
+
 ```{r}
-m_tbl <- r_clean_tbl |> 
+clot <- vect("vector/clot.gpkg") |>
+  project("EPSG:32631")
+
+r_clot <- map(r_rast, ~ crop(.x, clot, mask = TRUE))
+
+r_mask_clot <- map(r_clot, f_mask, .progress = TRUE)
+
+r_agua_clot <- tibble(
+  x = r_mask_clot
+) |>
+  mutate(raster = map_lgl(x, is.null)) |>
+  filter(!raster) |>
+  pull(x)
+
+area_clot <- map(r_agua_clot, f_area, .progress = TRUE) |>
+  list_rbind()
+
+max_area_clot <- max(area_clot$area)
+
+fechas_nubes_parciales_clot <- area_clot |>
+  slice_min(order_by = area, n = 4) |>
+  pull(fecha)
+
+areas_clot <- area_clot |>
+  mutate(nro = row_number()) |>
+  filter(area >= max_area_clot * .7) |>
+  pull(nro)
+
+r_clean_clot <- tibble(
+  x = r_agua_clot
+) |>
+  mutate(nro = row_number()) |>
+  filter(nro %in% areas_clot) |>
+  pull(x)
+
+clot_wst <- tibble(x_clean = r_clean_clot) |>
   mutate(
-    b10 = map(x_clean, ~.x[["ST_B10"]])
-  ) |> 
+    rec = map(x_clean, ~ crop(.x[["ST_B10"]], clot, mask = TRUE))
+  ) |>
   mutate(
-    wst = map(b10, ~0.00341802*.x-124.15)
-  ) |> 
+    fecha = map(x_clean, f_fecha) |> list_c()
+  ) |>
+  pull(rec)
+
+ancho_clot <- 1000
+alto_clot <- ancho_clot * (1270 / 1762)
+
+walk(
+  clot_wst,
+  ~ f_wst(
+    .x,
+    carpeta = "clot",
+    escala_color = "white",
+    tam_x = ancho_clot,
+    tam_y = alto_clot
+  ),
+  .progress = TRUE
+)
+
+if (FALSE) {
+  l_clot <- list.files(
+    path = "figuras/clot/",
+    pattern = "png",
+    full.names = TRUE
+  )
+
+  av::av_encode_video(
+    input = l_clot,
+    framerate = 2,
+    output = "videos/clot.mp4"
+  )
+}
+```
+
+:::: {.column-page-inset-right}
+
+::: {#fig-wst-clot}
+
+![](videos/clot.mp4){loop="true"}
+
+Animación de `WST` correspondiente a El Clot.
+
+:::
+
+::::
+
+Se calculó la mediana de `WST` para El Clot y se muestra a continuación como serie temporal.
+
+```{r}
+wst_clot <- map(clot_wst, ~ 0.00341802 * .x - 124.15)
+
+wst_clot_tbl <- tibble(
+  r = wst_clot
+) |>
   mutate(
-    m = map(wst, ~global(.x, c("mean", "sd"), na.rm = TRUE))
-  ) |> 
-  unnest(m) |> 
-  select(fecha, mean, sd) |> 
+    fecha = map(clot_wst, f_fecha) |> list_c()
+  ) |>
+  mutate(
+    m = map_dbl(r, ~ global(.x, median, na.rm = TRUE)$global)
+  ) |>
+  select(fecha, m)
+
+write_csv(wst_clot_tbl, "datos/wst_clot.csv")
+wst_clot_tbl <- read_csv("datos/wst_clot.csv", show_col_types = FALSE)
+
+g_boxplot_clot <- wst_clot_tbl |>
+  mutate(mes = month(fecha, abbr = TRUE, label = TRUE)) |>
+  ggplot(aes(mes, m, group = mes)) +
+  geom_boxplot(color = c1, outlier.alpha = .7) +
+  scale_x_discrete(labels = \(x) str_to_sentence(x)) +
+  scale_y_continuous(
+    limits = c(4, 34),
+    breaks = scales::breaks_width(2),
+    expand = c(0, 0)
+  ) +
+  labs(x = NULL, y = "WST (°C)") +
+  theme_bw(base_family = "Lato", base_size = 12) +
+  theme(
+    plot.background = element_blank(),
+    panel.grid.major = element_line(color = "grey70", linewidth = .1),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.text = element_text(family = "Fira Code", color = "black"),
+  )
+
+ggsave(
+  plot = g_boxplot_clot,
+  filename = "figuras/boxplot_wst_clot.png",
+  width = 25,
+  height = 12,
+  units = "cm"
+)
+
+browseURL(paste0(getwd(), "/figuras/boxplot_wst_clot.png"))
+```
+
+::: {.column-page-inset-right}
+
+![Boxplot mensual de `WST` medianas en El Clot](figuras/boxplot_wst_clot.png){#fig-boxplot-clot}
+
+:::
+
+```{r}
+m_tbl <- r_clean_tbl |>
+  mutate(
+    b10 = map(x_clean, ~ .x[["ST_B10"]])
+  ) |>
+  mutate(
+    wst = map(b10, ~ 0.00341802 * .x - 124.15)
+  ) |>
+  mutate(
+    m = map(wst, ~ global(.x, c("mean", "sd"), na.rm = TRUE))
+  ) |>
+  unnest(m) |>
+  select(fecha, mean, sd) |>
   reframe(
     wst_mean = mean(mean),
     wst_sd = mean(sd)
   )
 
-wst_z_tbl <- r_clean_tbl |> 
+wst_z_tbl <- r_clean_tbl |>
   mutate(
-    b10 = map(x_clean, ~.x[["ST_B10"]])
-  ) |> 
+    b10 = map(x_clean, ~ .x[["ST_B10"]])
+  ) |>
   mutate(
-    wst = map(b10, ~0.00341802*.x-124.15)
-  ) |> 
+    wst = map(b10, ~ 0.00341802 * .x - 124.15)
+  ) |>
   mutate(
-    wst_z = map(wst, ~(.x - m_tbl$wst_mean)/m_tbl$wst_sd)
-  ) |> 
+    wst_z = map(wst, ~ (.x - m_tbl$wst_mean) / m_tbl$wst_sd)
+  ) |>
   pull(wst_z)
 
 wst_z_rango <- map(
   wst_z_tbl,
   \(x) global(x, c("min", "max"), na.rm = TRUE)
-) |> 
-  list_rbind() |> 
+) |>
+  list_rbind() |>
   as_tibble()
 
 z_min <- floor(min(wst_z_rango$min))
@@ -818,24 +992,24 @@ ggplot() +
   ) +
   theme_void()
 
-r_mediana <- r_clean_tbl |> 
+r_mediana <- r_clean_tbl |>
   mutate(
-    b10 = map(x_clean, ~.x[["ST_B10"]])
-  ) |> 
+    b10 = map(x_clean, ~ .x[["ST_B10"]])
+  ) |>
   mutate(
-    wst = map(b10, ~0.00341802*.x-124.15)
-  ) |> 
+    wst = map(b10, ~ 0.00341802 * .x - 124.15)
+  ) |>
   mutate(
     dif = map(wst, ~ .x - m)
-  ) |> 
+  ) |>
   pull(dif)
 
 map(
   r_mediana,
-  ~global(.x, c("min", "max"), na.rm = TRUE)
-) |> 
-  list_rbind() |> 
-  as_tibble() |> 
+  ~ global(.x, c("min", "max"), na.rm = TRUE)
+) |>
+  list_rbind() |>
+  as_tibble() |>
   reframe(
     min = min(min),
     max = max(max)
@@ -843,14 +1017,15 @@ map(
 
 ggplot() +
   geom_spatraster(
-    data = r_mediana[[10]], maxcell = prod(dim(r_mediana[[1]]))
+    data = r_mediana[[10]],
+    maxcell = prod(dim(r_mediana[[1]]))
   ) +
   scale_fill_gradient2(
     low = "#1A318B",
     mid = "white",
     high = "#9A153D",
     na.value = "grey10",
-    midpoint = (-21+30)/2,
+    midpoint = (-21 + 30) / 2,
     limits = c(-21, 30),
     breaks = seq(-21, 30, 5),
     name = "Temp. (°C)"
