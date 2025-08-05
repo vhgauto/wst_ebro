@@ -26,7 +26,7 @@ clot <- vect("vector/clot.gpkg") |>
 # )
 
 # writeRaster(esri, "raster/esri.tif", overwrite = TRUE)
-esri <- rast("esri.tif")
+esri <- rast("extras/esri.tif")
 
 # puntos de interés
 puntos_df <- data.frame(
